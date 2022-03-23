@@ -154,32 +154,31 @@ def run_tests(self, user_id, instance_id, exercise_id, answer_id, lang_code, rev
     # Save the rendered results into Redis
     task_id = self.request.id
     r = redis.StrictRedis(**django_settings.REDIS_RESULT_CONFIG)
-    r.set(task_id, json.dumps(evaluation), ex=django_settings.REDIS_RESULT_EXPIRE)
-
-    # Save the results to database
-    result_string = json.dumps(results)
-    correct = evaluation["correct"]
-    points = exercise_object.default_points
-    
-    evaluation_obj = cm.Evaluation(test_results=result_string,
-                                   points=points,
-                                   correct=correct)
-    evaluation_obj.save()
     
     try:
         answer_object = cm.UserFileUploadExerciseAnswer.objects.get(id=answer_id)
     except cm.UserFileUploadExerciseAnswer.DoesNotExist as e:
-        # TODO: Log weird request
-        return # TODO: Find a way to signal the failure to the user
-    answer_object.evaluation = evaluation_obj
-    answer_object.save()
-
-    return evaluation_obj.id
+        return
     
-    # TODO: Should we:
-    # - return the results? (no)
-    # - save the results directly into db? (is this worker contained enough?)
-    # - send the results to a more privileged Celery worker for saving into db?
+    evaluation.update(
+                        result = results
+                )
+    evaluation.update(
+                        answer = answer_object.id
+                )
+    evaluation.update(
+                        user = user_object.id
+                )
+    evaluation.update(
+                        points = exercise_object.default_points
+                )
+    evaluation.update(
+                        exercise = exercise_id
+                )
+    
+    r.set(task_id, json.dumps(evaluation), ex=django_settings.REDIS_RESULT_EXPIRE)
+
+    return
 
 def generate_results(results, exercise_id):
     evaluation = {}
